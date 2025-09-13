@@ -38,6 +38,13 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
      * PGDATABASE=your_database
      * PGADMIN_EMAIL=your_email
      * PGADMIN_PASSWORD=your_password
+   -Ejemplo:
+* PGUSER=admin
+* PGPASSWORD=123
+* PGDATABASE=qbo_dw
+* PGADMIN_EMAIL=ahmedpuco@gmail.com
+* PGADMIN_PASSWORD=123
+
    - 
 2. **Levantamos el contenedor**  
    - `docker compose up -d`  
@@ -56,9 +63,9 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
 | QBO_REFRESH_TOKEN   | Necesario para poder generar access_token     |Rota por expiración o por cantidad de usos |  TI   |
 | QBO_REALM_ID        | Company ID de QBO                           | Estática (por compañía)           | Data Eng        |
 | PG_HOST/PORT/DB     | Conexión a Postgres                         | No rota,a menos, que el DBA haga cambios          | Plataforma      |
-| PG_USER/PASSWORD    | Credenciales de Postgres                    | No rota, a menos que cambie de usuario                | Plataforma      |
+| PG_USER/PASSWORD    | Credenciales de Postgres                    | No rota, a menos que cambie de usuario . En este caso, si no usa los valores por defecto del literal anterior, toca rotar el usser y el password               | Plataforma      |
 
-> En la carpeta del proyecto definimos un .env que contiene las credenciales para poder arrancar Postgres. En este caso, subimos un .env.example para que defina las variables y se pueda alzar el postgres.
+> En la carpeta del proyecto definimos un .env que contiene las credenciales para poder arrancar Postgres. En este caso, subimos un .env.example para que defina las variables y se pueda alzar el postgres. 
 ---
 
 ## Pipelines
