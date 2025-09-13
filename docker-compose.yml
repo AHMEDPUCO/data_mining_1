@@ -11,7 +11,8 @@ services:
       POSTGRES_USER: ${PGUSER:?set_in_local_env}
       POSTGRES_PASSWORD: ${PGPASSWORD:?set_in_local_env}
     volumes:
-      - ./pg_data:/var/lib/postgresql/data 
+      - ./pg_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$PGUSER -d $$PGDATABASE"]
       interval: 10s
