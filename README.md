@@ -29,7 +29,8 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
 ##  Cómo levantar el proyecto
 
 1. **Clonar el repositorio**  
-   - `git clone https://github.com/AHMEDPUCO/data_mining_1.git`  
+   - `git clone https://github.com/AHMEDPUCO/data_mining_1.git`
+   -  `cd data_mining_1 `
 
 2. **Configuramos el .env para poder levantar el postgres**  
    - Definimos valores para:
@@ -46,13 +47,13 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
    * PGADMIN_PASSWORD=123
 
    - 
-2. **Levantamos el contenedor**  
+3. **Levantamos el contenedor**  
    - `docker compose up -d`  
 
-3. **Ingresar a la UI de mage**  
+4. **Ingresar a la UI de mage**  
    - En el navegador: [http://localhost:6789](http://localhost:6789)  
 
-4. **Abrir pgAdmin**  
+5. **Abrir pgAdmin**  
    - Validar conexión al Postgres. Para esto debemos crear el servidor. Usamos como nombre de conexión "postgres".
    - Si queremos ver la información ya recopilada, debemos usar el siguiente comando **"docker exec -i postgres psql -U <user> -d qbo_dw < init.sql"** donde user va a ser el pg_user que se declare en el .env creado por el usuario
    - El init.sql va a contener toda la información original recopilada por las antiguas ejecuciones de los pipelines.
