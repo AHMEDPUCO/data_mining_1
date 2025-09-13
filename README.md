@@ -12,7 +12,7 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
 
 ## Características principales
 
-- Segmentación de rangos `[fecha_inicio, fecha_fin)` en: `day | week | month | quarter | year` (UTC).  
+- Segmentación de rangos `[fecha_inicio, fecha_fin)` 
 - Extracción vía API QBO **OAuth2**.  
 - Paginación completa con **backoff exponencial + jitter** para evitar problemas de carga.  
 - Carga **idempotente** en Postgres (`UPSERT`).  
@@ -54,7 +54,7 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
 
 4. **Abrir pgAdmin**  
    - Validar conexión al Postgres. Para esto debemos crear el servidor. Usamos como nombre de conexión "postgres".
-   - Si queremos ver la información ya recopilada, debemos usar el siguiente comando "docker exec -i postgres psql -U <user> -d qbo_dw < init.sql" donde user va a ser el pg_user que se declare en el .env creado por el usuario
+   - Si queremos ver la información ya recopilada, debemos usar el siguiente comando **"docker exec -i postgres psql -U <user> -d qbo_dw < init.sql"** donde user va a ser el pg_user que se declare en el .env creado por el usuario
    - El init.sql va a contener toda la información original recopilada por las antiguas ejecuciones de los pipelines.
 ---
 
@@ -131,7 +131,7 @@ QuickBooks tiene límites importantes:
 
 - **Política post-ejecución**: al finalizar, deshabilitar o eliminar el trigger para evitar reejecuciones accidentales.
 
-📸 Evidencia del trigger de un pipeline:  
+ Evidencia del trigger de un pipeline:  
 <img width="1838" height="928" src="evidencias/qb_invoices_pipeline_trigger.png" />  
 
 
