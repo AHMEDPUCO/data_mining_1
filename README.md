@@ -38,12 +38,12 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
      * PGDATABASE=your_database
      * PGADMIN_EMAIL=your_email
      * PGADMIN_PASSWORD=your_password
-   -Ejemplo:
-* PGUSER=admin
-* PGPASSWORD=123
-* PGDATABASE=qbo_dw
-* PGADMIN_EMAIL=ahmedpuco@gmail.com
-* PGADMIN_PASSWORD=123
+- **Ejemplo**:
+   * PGUSER=admin
+   * PGPASSWORD=123
+   * PGDATABASE=qbo_dw
+   * PGADMIN_EMAIL=ahmedpuco@gmail.com
+   * PGADMIN_PASSWORD=123
 
    - 
 2. **Levantamos el contenedor**  
@@ -78,10 +78,11 @@ Los parametros que le vamos a pasar son los siguientes
 - 'page_size'
 - 'fecha_inicio'
 - 'fecha_fin'
+
 Estos son ingresados desde el trigger; sin embargo, se ponen valores por default para evitar posibles errores de ejecución.
 
 
-##Estructura
+## Estructura
 ### `qb_customers_backfill`
 - `qb_customer_loader`  
 - `qb_customer_exporter`  
