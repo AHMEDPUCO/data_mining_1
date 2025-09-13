@@ -1,0 +1,58 @@
+name: qbo_backfill
+services:
+  postgres:
+    image: postgres:13 #nombre del servicio funciona como hostname DNS en la red(así Mage puede conectarse a host=postgres y no a IPs).
+    container_name: postgres
+    networks: [qbo_net]
+    ports:
+      - "5432:5432"  # opcional exponer; PgAdmin no lo necesita expuesto
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-qbo_dw}
+      POSTGRES_USER: ${PGUSER:?set_in_local_env}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?set_in_local_env}
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$PGUSER -d $$PGDATABASE"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mage:
+    image: mageai/mageai
+    container_name: mage
+    networks: [qbo_net]
+    ports:
+      - "6789:6789"
+    environment:
+      # No secrets aquí. Usa Mage Secrets dentro de los pipelines.
+      MAGE_PROJECT_NAME: qbo_backfill
+      MAGE_DATA_DIR: /home/src
+      TZ: UTC #TZ: UTC: fuerza logs y tiempos de ejecución en UTC (alineado al enunciado).
+    volumes:
+      - ./mage_home:/home/src
+    depends_on:
+      postgres:
+        condition: service_healthy #Revisa que haya pasado la prueba de ver si el contenedor de Postgres está listo
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    networks: [qbo_net]
+    ports:
+      - "8080:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?set_in_local_env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set_in_local_env}
+    depends_on:
+      - postgres
+
+networks:
+  qbo_net:
+
+volumes:
+  pg_data:
+    driver: local
+  mage_data:
+    driver: local
+  

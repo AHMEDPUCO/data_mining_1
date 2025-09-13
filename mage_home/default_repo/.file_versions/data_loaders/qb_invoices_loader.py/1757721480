@@ -1,0 +1,305 @@
+import requests
+import base64
+import time
+import random
+from datetime import datetime, timedelta, timezone
+
+from mage_ai.data_preparation.shared.secrets import get_secret_value
+try:
+    from mage_ai.data_preparation.shared.secrets import set_secret_value
+except Exception:
+    set_secret_value = None
+
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+
+# --------------------------
+# Utilidades
+# --------------------------
+def _now_utc():
+    return datetime.now(timezone.utc)
+
+
+def _parse_iso_utc(s: str) -> datetime:
+    """
+    Admite 'YYYY-MM-DD' (asume 00:00:00Z)
+    """
+    if 'T' not in s:
+        s = s.strip() + "T00:00:00Z"
+    return datetime.fromisoformat(s.replace('Z', '+00:00')).astimezone(timezone.utc)
+
+
+def _date_range_chunks(start_utc_day: datetime, end_utc_day: datetime, days_per_chunk: int = 1):
+    """
+Generador rango de ventanas chunk
+    """
+    if start_utc_day.tzinfo is None or end_utc_day.tzinfo is None:
+        raise ValueError("Las fechas deben ser timezone-aware (UTC).")
+    current_day = start_utc_day
+    step_day = timedelta(days=days_per_chunk)
+    while current_day <= end_utc_day:
+        chunk_end = min(current_day + step_day - timedelta(seconds=1), end_utc_day)
+        yield current_day, chunk_end
+        current_day = current_day + step_day
+
+
+# --------------------------
+# OAuth2: refresh token
+# --------------------------
+def refresh_access_token():
+
+    client_id = get_secret_value('qb_client_id')
+    client_secret = get_secret_value('qb_client_secret')
+    refresh_token = get_secret_value('qb_refresh_token')
+
+    if not all([client_id, client_secret, refresh_token]):
+        raise ValueError("Faltan secrets: qb_client_id, qb_client_secret o qb_refresh_token")
+
+    # Codificar client_id:client_secret en base64
+    credentials = f"{client_id}:{client_secret}"
+    encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+
+    url = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+    headers = {
+        "Authorization": f"Basic {encoded_credentials}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+    }
+
+    resp = requests.post(url, headers=headers, data=data, timeout=30)
+    try:
+        resp.raise_for_status()
+    except Exception as e:
+        raise RuntimeError(f"Error al refrescar token: {resp.status_code} {resp.text}") from e
+
+    tokens = resp.json()
+    new_access_token = tokens.get('access_token')
+    new_refresh_token = tokens.get('refresh_token')
+
+    if not new_access_token:
+        raise RuntimeError("Respuesta inválida: no se recibió access_token")
+
+    # Rotación de refresh_token
+    if new_refresh_token and new_refresh_token != refresh_token and set_secret_value:
+        try:
+            set_secret_value('qb_refresh_token', new_refresh_token)
+            print("Refresh token rotado en Mage Secrets.")
+        except Exception:
+            print("No se pudo persistir el nuevo refresh_token en Mage Secrets. Rótalo manualmente.")
+
+    print("Access token refrescado exitosamente.")
+    return new_access_token
+
+
+# --------------------------
+#Paginación con lógica de backoff implementada
+# --------------------------
+def _qbo_query_page(session: requests.Session, base_url: str, realm_id: str,
+                    access_token: str, minor_version: int, qbo_sql: str,
+                    startposition: int, maxresults: int):
+    """
+    Ejecuta UNA página de la QBO SQL Query con manejo de rate limits (429) y 5xx (backoff + jitter).
+    """
+    if not base_url or not minor_version:
+        raise ValueError("Se requiere url base y minor_version")
+
+    url = f"{base_url.rstrip('/')}/v3/company/{realm_id}/query"
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Accept': 'application/json',
+        'Content-Type': 'text/plain',
+    }
+    params = {
+        'query': f"{qbo_sql} startposition {startposition} maxresults {maxresults}",
+        'minorversion': minor_version,
+    }
+
+    max_retries = 6  #Numero máximo de reintentos
+    base_sleep = 1.5  # segundos para backofff exponencial
+
+    for attempt in range(1, max_retries + 1):
+        resp = session.get(url, headers=headers, params=params, timeout=60)
+        if resp.status_code == 429 or 500 <= resp.status_code < 600:  # 429(rate limit) , 5xx(Error del servidor)            
+            retry_after = resp.headers.get("Retry-After") 
+            if retry_after:  #Usamos valor dado por el retry after
+                sleep_s = float(retry_after)
+            else:
+                sleep_s = base_sleep * (2 ** (attempt - 1)) + random.uniform(0, 0.3)  #Backoof exponencial con jitter aleatorio para evitar demasiados reintentos en el mismo tiempo 
+            print(f"Retry {attempt}/{max_retries} por {resp.status_code}. Durmiendo {sleep_s:.1f}s")
+            time.sleep(sleep_s)
+            continue
+        try:
+            resp.raise_for_status()
+            data = resp.json() #Se devuelve la informacion en forma de diccionario
+            return data
+        except Exception as e:
+            raise RuntimeError(f"Error QBO query (HTTP {resp.status_code}): {resp.text}") from e 
+
+    raise RuntimeError("Se agotaron los reintentos contra QBO.")
+
+
+# --------------------------
+# Iterar todas las páginas
+# --------------------------
+def _fetch_qb_data(session: requests.Session, realm_id: str, access_token: str,
+                   qbo_sql: str, base_url: str, minor_version: int, page_size: int = 1000):
+    """
+    Itera todas las páginas hasta agotar resultados.
+    Devuelve data y métricas
+    """
+    startposition = 1
+    total_rows = 0
+    page_number = 0
+    items = []
+
+    while True:
+        page_number += 1
+        t0 = time.time()
+        data = _qbo_query_page(
+            session, base_url, realm_id, access_token, minor_version,
+            qbo_sql, startposition, page_size
+        )
+        qr = data.get("QueryResponse", {})
+        rows = qr.get("Invoice", [])
+        items.extend(rows)
+
+        elapsed = time.time() - t0
+        print(f"Página {page_number}: {len(rows)} filas en {elapsed:.2f}s (start={startposition})")
+
+        total_rows += len(rows)
+        # Si trae menos que page_size, no hay más páginas
+        if len(rows) < page_size:
+            break
+
+        startposition += page_size
+        #Metricas solicitadas
+    metrics = {
+        "pages": page_number,
+        "page_size": page_size,
+        "rows_total": total_rows,
+    }
+    return items, metrics
+
+
+
+# --------------------------
+# Loader (block de Mage)
+# --------------------------
+@data_loader
+@data_loader
+def load_data(*args, **kwargs):
+    """
+    Parametros a pasar:    
+      - fecha_inicio ("2025-08-01T00:00:00Z")
+      - fecha_fin    ("2025-08-28T23:59:59Z")
+      - days_per_chunk: int ( 1)
+      - page_size: int (1000)
+      - minor_version: int (75)
+    """
+
+    realm_id = get_secret_value('qb_realm_id')
+    client_id = get_secret_value('qb_client_id')
+    client_secret = get_secret_value('qb_client_secret')
+
+    if not all([realm_id, client_id, client_secret]):
+        raise ValueError("Faltan secrets: Realm_id, qb_client_id, qb_client_secret")
+
+    access_token = refresh_access_token()
+
+    # Configuración fechas
+    fecha_inicio = kwargs.get('fecha_inicio',"2025-01-01")
+    fecha_fin = kwargs.get('fecha_fin',"2025-09-10")
+    
+    
+    if not fecha_inicio or not fecha_fin:
+        raise ValueError("Debe proporcionar 'fecha_inicio' y 'fecha_fin'.")
+
+    start_utc = _parse_iso_utc(fecha_inicio)
+    end_utc = _parse_iso_utc(fecha_fin)
+
+    minor_version = int(kwargs.get('minor_version',25))
+    page_size = int(kwargs.get('page_size', 1000))
+    days_per_chunk = int(kwargs.get('days_per_chunk', 7))
+    
+    #Formación del url
+    base_url = 'https://sandbox-quickbooks.api.intuit.com'
+
+    session = requests.Session()
+    all_rows = []
+    audit = []
+    chunk_idx = 0
+
+
+    for win_start, win_end in _date_range_chunks(start_utc, end_utc, days_per_chunk=days_per_chunk):
+        chunk_idx += 1
+        print(f"Chunk {chunk_idx}: {win_start.isoformat()} → {win_end.isoformat()}")
+        fecha_ini_str = win_start.strftime('%Y-%m-%d')
+        fecha_fin_str = win_end.strftime('%Y-%m-%d')
+
+        #SE CONSTRUYE CONSULTA PARA CADA RANGO DE FECHAS DEPENDIENDO DEL CHUNK
+        qbo_sql = f"""
+            select * from Invoice
+            where Metadata.CreateTime >= '{fecha_ini_str}' and Metadata.CreateTime <= '{fecha_fin_str}'
+            order by Metadata.CreateTime asc
+        """.strip()
+
+        # Detectar entidad desde el SQL
+        entity_name = "Invoice"
+
+        t0 = time.time()
+        rows, metrics = _fetch_qb_data(
+            session, realm_id, access_token, qbo_sql, base_url, minor_version, 
+           
+            page_size=page_size
+        )
+        elapsed = time.time() - t0
+
+        audit.append({
+            "chunk": chunk_idx,
+            "window_start_utc": win_start.isoformat(),
+            "window_end_utc": win_end.isoformat(),
+            "pages": metrics["pages"],
+            "page_size": metrics["page_size"],
+            "rows": metrics["rows_total"],
+            "duration_sec": round(elapsed, 2),
+        })
+
+        # 👇👇👇 AQUÍ EL CAMBIO CLAVE: Añadir _metadata a cada fila
+        for row in rows:
+            row['_metadata'] = {
+                'chunk': chunk_idx,
+                'window_start_utc': win_start.isoformat(),
+                'window_end_utc': win_end.isoformat(),
+            }
+
+        all_rows.extend(rows)
+
+    result = {
+        "minor_version": minor_version,
+        "count": len(all_rows),
+        "data": all_rows,
+        "audit": audit,
+        "generated_at_utc": _now_utc().isoformat(),
+    }
+
+    return result
+
+
+# --------------------------
+# Test del block
+# --------------------------
+@test
+def test_output(output, *args) -> None:
+    assert output is not None, 'El output es None'
+    assert isinstance(output, dict), 'Output debe ser dict'
+    assert 'data' in output and isinstance(output['data'], list), 'Output["data"] debe ser lista'
+    assert 'audit' in output and isinstance(output['audit'], list), 'Output["audit"] debe ser lista'
+    if output.get('count', 0) > 0:
+        sample = output['data'][0]
+        assert isinstance(sample, dict), 'Cada fila debe ser un dict (JSON)'
