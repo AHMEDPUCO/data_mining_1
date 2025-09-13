@@ -53,7 +53,9 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
    - En el navegador: [http://localhost:6789](http://localhost:6789)  
 
 4. **Abrir pgAdmin**  
-   - Validar conexión al Postgres.  
+   - Validar conexión al Postgres. Para esto debemos crear el servidor. Usamos como nombre de conexión "postgres".
+   - Si queremos ver la información ya recopilada, debemos usar el siguiente comando "docker exec -i postgres psql -U <user> -d qbo_dw < init.sql" donde user va a ser el pg_user que se declare en el .env creado por el usuario
+   - El init.sql va a contener toda la información original recopilada por las antiguas ejecuciones de los pipelines.
 ---
 
 ###  Gestión de secretos (propósito/rotación/responsables)
@@ -202,8 +204,8 @@ Las validaciones se corren **automáticamente al ejecutar el pipeline** desde Ma
 ##  Loader – Logs
 
 Durante la ejecución del `loader`, se imprime información sobre cada página procesada, incluyendo:
-Página 1: 7 filas en 0.48s (start=1)
-Chunk 32: 2025-08-06T00:00:00+00:00 → 2025-08-12T23:59:59+00:00
+- **Página 1: 7 filas en 0.48s (start=1)**
+- **Chunk 32: 2025-08-06T00:00:00+00:00 → 2025-08-12T23:59:59+00:00**
 
 ###  ¿Qué significa cada parte?
 
@@ -225,10 +227,10 @@ Esta información permite validar:
 
 En el bloque `exporter`, se imprimen logs detallando cómo se insertan los datos en la base de datos:
 
-Batch INVOICES: 10 (inserted=10, updated=0, skipped=0)
-Batch INVOICES: 10 (inserted=10, updated=0, skipped=0)
-Batch INVOICES: 3 (inserted=3, updated=0, skipped=0)
-Carga INVOICES: 23 filas en 0.12s (inserted=23, updated=0, skipped=0)
+- **Batch INVOICES: 10 (inserted=10, updated=0, skipped=0)**
+- **Batch INVOICES: 10 (inserted=10, updated=0, skipped=0)**
+- **Batch INVOICES: 3 (inserted=3, updated=0, skipped=0)**
+- **Carga INVOICES: 23 filas en 0.12s (inserted=23, updated=0, skipped=0)**
 
 ###  ¿Cómo interpretar estos logs?
 
