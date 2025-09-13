@@ -67,7 +67,7 @@ En el exporter, definimos el esquema raw de las tablas de la base de datos, defi
 | PG_HOST/PORT/DB     | Conexión a Postgres                         | No rota,a menos, que el DBA haga cambios          | Plataforma      |
 | PG_USER/PASSWORD    | Credenciales de Postgres                    | No rota, a menos que cambie de usuario . En este caso, si no usa los valores por defecto del literal anterior, toca rotar el usser y el password               | Plataforma      |
 
-> En la carpeta del proyecto definimos un .env que contiene las credenciales para poder arrancar Postgres. En este caso, subimos un .env.example para que defina las variables y se pueda alzar el postgres. 
+> En la carpeta del proyecto definimos un .env que contiene las credenciales para poder arrancar Postgres. En este caso, subimos un .env.example para que tenga una noción de como definir las variables y así pueda crear el propio .env y levantar el servicio del postgres.
 ---
 
 ## Pipelines
