@@ -151,7 +151,7 @@ def export_invoices_to_postgres(data, *args, **kwargs):
     return {
         "processed": len(rows),
         "inserted": total_inserted,
-        "updated": total_updated,
+        "updaed": total_updated,
         "skipped": total_skipped,
         "elapsed_sec": elapsed,
         "finished_at_utc": _utc_iso_now(),
